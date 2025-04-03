@@ -58,13 +58,29 @@ jobs:
                 Current Step: 1/3 - Services Selection
 
                 ### Which services do you need?
-                - [ ] NestJS API
-                - [ ] Vue.js Frontend
-                - [ ] PrestaShop
-                - [ ] MySQL
-                - [ ] Redis
-
-                Please check the services you need and reply with "next" when done.`
+                <form>
+                  <div>
+                    <input type="checkbox" id="nestjs-api" name="service" value="nestjs-api">
+                    <label for="nestjs-api">NestJS API</label>
+                  </div>
+                  <div>
+                    <input type="checkbox" id="vue-frontend" name="service" value="vue-frontend">
+                    <label for="vue-frontend">Vue.js Frontend</label>
+                  </div>
+                  <div>
+                    <input type="checkbox" id="prestashop" name="service" value="prestashop">
+                    <label for="prestashop">PrestaShop</label>
+                  </div>
+                  <div>
+                    <input type="checkbox" id="mysql" name="service" value="mysql">
+                    <label for="mysql">MySQL</label>
+                  </div>
+                  <div>
+                    <input type="checkbox" id="redis" name="service" value="redis">
+                    <label for="redis">Redis</label>
+                  </div>
+                  <button type="submit">Next</button>
+                </form>`
               });
             }
 
@@ -81,10 +97,10 @@ jobs:
                 - \`/help\`: Show this help message
 
                 During environment creation:
-                - Check the boxes for your selections
-                - Reply with "next" to proceed to the next step
-                - Reply with "back" to go to the previous step
-                - Reply with "cancel" to cancel the creation`
+                - Use the interactive buttons to make your selections
+                - Click "Next" to proceed to the next step
+                - Click "Back" to go to the previous step
+                - Click "Cancel" to cancel the creation`
               });
             }
 
@@ -127,12 +143,26 @@ jobs:
                     Current Step: 2/3 - Duration Selection
 
                     ### How long should this environment exist?
-                    - [ ] 1 hour (1h)
-                    - [ ] 24 hours (24h)
-                    - [ ] 7 days (7d)
-                    - [ ] 30 days (30d)
-
-                    Please select the duration and reply with "next" when done.`
+                    <form>
+                      <div>
+                        <input type="radio" id="1h" name="ttl" value="1h">
+                        <label for="1h">1 hour (1h)</label>
+                      </div>
+                      <div>
+                        <input type="radio" id="24h" name="ttl" value="24h">
+                        <label for="24h">24 hours (24h)</label>
+                      </div>
+                      <div>
+                        <input type="radio" id="7d" name="ttl" value="7d">
+                        <label for="7d">7 days (7d)</label>
+                      </div>
+                      <div>
+                        <input type="radio" id="30d" name="ttl" value="30d">
+                        <label for="30d">30 days (30d)</label>
+                      </div>
+                      <button type="submit">Next</button>
+                      <button type="button" onclick="history.back()">Back</button>
+                    </form>`
                   });
                 }
                 else if (currentStep === 2) {
@@ -168,10 +198,19 @@ jobs:
                     Current Step: 3/3 - Resource Limits
 
                     ### Would you like to customize resource limits?
-                    - [ ] Yes, customize limits
-                    - [ ] No, use defaults
-
-                    Please select an option and reply with "next" when done.`
+                    <form>
+                      <div>
+                        <input type="radio" id="yes" name="customize" value="yes">
+                        <label for="yes">Yes, customize limits</label>
+                      </div>
+                      <div>
+                        <input type="radio" id="no" name="customize" value="no">
+                        <label for="no">No, use defaults</label>
+                      </div>
+                      <button type="submit">Next</button>
+                      <button type="button" onclick="history.back()">Back</button>
+                      <button type="button" onclick="cancel()">Cancel</button>
+                    </form>`
                   });
                 }
                 else if (currentStep === 3) {
@@ -269,13 +308,29 @@ jobs:
                     Current Step: 1/3 - Services Selection
 
                     ### Which services do you need?
-                    - [ ] NestJS API
-                    - [ ] Vue.js Frontend
-                    - [ ] PrestaShop
-                    - [ ] MySQL
-                    - [ ] Redis
-
-                    Please check the services you need and reply with "next" when done.`
+                    <form>
+                      <div>
+                        <input type="checkbox" id="nestjs-api" name="service" value="nestjs-api">
+                        <label for="nestjs-api">NestJS API</label>
+                      </div>
+                      <div>
+                        <input type="checkbox" id="vue-frontend" name="service" value="vue-frontend">
+                        <label for="vue-frontend">Vue.js Frontend</label>
+                      </div>
+                      <div>
+                        <input type="checkbox" id="prestashop" name="service" value="prestashop">
+                        <label for="prestashop">PrestaShop</label>
+                      </div>
+                      <div>
+                        <input type="checkbox" id="mysql" name="service" value="mysql">
+                        <label for="mysql">MySQL</label>
+                      </div>
+                      <div>
+                        <input type="checkbox" id="redis" name="service" value="redis">
+                        <label for="redis">Redis</label>
+                      </div>
+                      <button type="submit">Next</button>
+                    </form>`
                   });
                 }
                 else if (currentStep === 3) {
@@ -288,12 +343,26 @@ jobs:
                     Current Step: 2/3 - Duration Selection
 
                     ### How long should this environment exist?
-                    - [ ] 1 hour (1h)
-                    - [ ] 24 hours (24h)
-                    - [ ] 7 days (7d)
-                    - [ ] 30 days (30d)
-
-                    Please select the duration and reply with "next" when done.`
+                    <form>
+                      <div>
+                        <input type="radio" id="1h" name="ttl" value="1h">
+                        <label for="1h">1 hour (1h)</label>
+                      </div>
+                      <div>
+                        <input type="radio" id="24h" name="ttl" value="24h">
+                        <label for="24h">24 hours (24h)</label>
+                      </div>
+                      <div>
+                        <input type="radio" id="7d" name="ttl" value="7d">
+                        <label for="7d">7 days (7d)</label>
+                      </div>
+                      <div>
+                        <input type="radio" id="30d" name="ttl" value="30d">
+                        <label for="30d">30 days (30d)</label>
+                      </div>
+                      <button type="submit">Next</button>
+                      <button type="button" onclick="history.back()">Back</button>
+                    </form>`
                   });
                 }
               }
