@@ -58,6 +58,13 @@ echo "📥 Loading Docker images into minikube..."
 minikube image load nestjs-api:latest
 minikube image load vue-frontend:latest
 
+# Add Helm repositories
+echo "📦 Adding Helm repositories..."
+helm repo add open-telemetry https://open-telemetry.github.io/opentelemetry-helm-charts
+helm repo add external-secrets https://charts.external-secrets.io
+helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+helm repo update
+
 # Install ArgoCD if not already installed
 if ! kubectl get namespace argocd &> /dev/null; then
     echo "📦 Installing ArgoCD..."
@@ -84,6 +91,10 @@ sleep 5
 echo "🔐 Logging in to ArgoCD CLI..."
 argocd login localhost:8080 --admin --password $ARGOCD_PASSWORD --insecure
 
+# Add Git repository to ArgoCD
+echo "📦 Adding Git repository to ArgoCD..."
+argocd repo add https://github.com/mRoux/gitops-repo.git --insecure
+
 # Create ArgoCD application
 echo "📝 Creating ArgoCD application..."
 cat <<EOF | kubectl apply -f -
@@ -95,7 +106,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/yourusername/gitops-repo.git
+    repoURL: https://github.com/mRoux/gitops-repo.git
     targetRevision: HEAD
     path: gitops/charts/unified-app
   destination:
@@ -107,9 +118,6 @@ spec:
       selfHeal: true
     syncOptions:
       - CreateNamespace=true
-  values:
-    global:
-      environment: development
 EOF
 
 # Get minikube IP

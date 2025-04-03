@@ -1,0 +1,189 @@
+name: Interactive Environment Creation
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  create-environment:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install ArgoCD CLI
+        run: |
+          curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
+          sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
+          rm argocd-linux-amd64
+
+      - name: Setup Environment Bot
+        uses: actions/github-script@v6
+        with:
+          script: |
+            // Create initial comment with questions
+            const services = [
+              { name: 'nestjs-api', label: 'NestJS API' },
+              { name: 'vue-frontend', label: 'Vue.js Frontend' },
+              { name: 'prestashop', label: 'PrestaShop' },
+              { name: 'mysql', label: 'MySQL' },
+              { name: 'redis', label: 'Redis' }
+            ];
+
+            const ttlOptions = [
+              { value: '1h', label: '1 hour' },
+              { value: '24h', label: '24 hours' },
+              { value: '7d', label: '7 days' },
+              { value: '30d', label: '30 days' }
+            ];
+
+            const servicesCheckboxes = services.map(s => `- [ ] ${s.label}`).join('\n');
+            const ttlOptionsList = ttlOptions.map(o => `- [ ] ${o.label} (${o.value})`).join('\n');
+
+            const comment = `## 🚀 Environment Setup Bot
+
+            Hi @${context.actor}! I'll help you set up your environment. Please answer the following questions:
+
+            ### 1. Which services do you need?
+            ${servicesCheckboxes}
+
+            ### 2. How long should this environment exist?
+            ${ttlOptionsList}
+
+            ### 3. Resource Limits (Optional)
+            Would you like to customize resource limits?
+            - [ ] Yes, customize limits
+            - [ ] No, use defaults
+
+            Please check the boxes above and I'll create your environment accordingly.`;
+
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+            // Store the comment ID for later updates
+            core.setOutput('comment_id', context.payload.comment.id);
+
+      - name: Monitor Responses
+        uses: actions/github-script@v6
+        with:
+          script: |
+            // Function to check if all questions are answered
+            const checkAnswers = async () => {
+              const comments = await github.rest.issues.listComments({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: context.issue.number,
+                per_page: 100
+              });
+              
+              // Find the latest response from the user
+              const userResponses = comments.data
+                .filter(c => c.user.login === context.actor)
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+              
+              if (!userResponses) return false;
+              
+              // Parse the response
+              const services = ['nestjs-api', 'vue-frontend', 'prestashop', 'mysql', 'redis'];
+              const selectedServices = services.filter(service => 
+                userResponses.body.includes(`- [x] ${service}`)
+              );
+              
+              const ttl = userResponses.body.match(/\[x\] .* \((.*?)\)/)?.[1];
+              
+              if (!selectedServices.length || !ttl) return false;
+              
+              // Create environment
+              const envName = `env-${context.actor}-${context.issue.number}`;
+              
+              // Create namespace
+              await exec.exec('kubectl', [
+                'create', 'namespace', envName,
+                '--dry-run=client',
+                '-o', 'yaml'
+              ]);
+              
+              // Create ArgoCD application
+              const application = {
+                apiVersion: 'argoproj.io/v1alpha1',
+                kind: 'Application',
+                metadata: {
+                  name: envName,
+                  namespace: 'argocd',
+                  annotations: {
+                    'argocd.argoproj.io/ttl': ttl
+                  }
+                },
+                spec: {
+                  project: 'default',
+                  source: {
+                    repoURL: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}`,
+                    targetRevision: context.payload.pull_request.head.ref,
+                    path: 'gitops/charts/unified-app'
+                  },
+                  destination: {
+                    server: 'https://kubernetes.default.svc',
+                    namespace: envName
+                  },
+                  syncPolicy: {
+                    automated: {
+                      prune: true,
+                      selfHeal: true
+                    },
+                    syncOptions: ['CreateNamespace=true']
+                  },
+                  helm: {
+                    values: `
+                      global:
+                        environment: ${envName}
+                        ttl:
+                          enabled: true
+                          duration: "${ttl}"
+                      ${services.map(service => `
+                      ${service}:
+                        enabled: ${selectedServices.includes(service)}
+                      `).join('\n')}
+                    `
+                  }
+                }
+              };
+              
+              await exec.exec('kubectl', [
+                'apply',
+                '-f',
+                '-'
+              ], {
+                input: JSON.stringify(application)
+              });
+              
+              // Update the comment with success message
+              await github.rest.issues.updateComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: context.payload.comment.id,
+                body: `## ✅ Environment Created Successfully!
+                
+                Your environment has been created with the following configuration:
+                
+                **Environment Name:** \`${envName}\`
+                **TTL:** \`${ttl}\`
+                **Services:** \`${selectedServices.join(', ')}\`
+                
+                The environment will be automatically deleted after the specified TTL.`
+              });
+              
+              return true;
+            };
+
+            // Poll for answers
+            let attempts = 0;
+            const maxAttempts = 10;
+
+            while (attempts < maxAttempts) {
+              if (await checkAnswers()) break;
+              await new Promise(resolve => setTimeout(resolve, 60000)); // Wait 1 minute
+              attempts++;
+            }
