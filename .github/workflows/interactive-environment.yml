@@ -23,11 +23,11 @@ jobs:
           rm argocd-linux-amd64
 
       - name: Setup Environment Bot
+        id: setup-bot
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            // Create initial comment with questions
             const services = [
               { name: 'nestjs-api', label: 'NestJS API' },
               { name: 'vue-frontend', label: 'Vue.js Frontend' },
@@ -63,21 +63,22 @@ jobs:
 
             Please check the boxes above and I'll create your environment accordingly.`;
 
-            await github.rest.issues.createComment({
+            const response = await github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
               body: comment
             });
 
-            // Store the comment ID for later updates
-            core.setOutput('comment_id', context.payload.comment.id);
+            core.setOutput('comment_id', response.data.id);
 
       - name: Monitor Responses
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
+            const commentId = core.getInput('comment_id');
+
             // Function to check if all questions are answered
             const checkAnswers = async () => {
               const comments = await github.rest.issues.listComments({
@@ -160,11 +161,11 @@ jobs:
                 input: JSON.stringify(application)
               });
               
-              // Update the comment with success message
-              await github.rest.issues.updateComment({
+              // Create a new success comment instead of updating
+              await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                comment_id: context.payload.comment.id,
+                issue_number: context.issue.number,
                 body: `## ✅ Environment Created Successfully!
                 
                 Your environment has been created with the following configuration:
