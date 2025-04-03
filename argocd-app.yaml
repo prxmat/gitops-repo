@@ -6,7 +6,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/mRoux/gitops-repo.git
+    repoURL: https://github.com/prxmat/gitops-repo.git
     targetRevision: HEAD
     path: gitops/charts/unified-app
     helm:

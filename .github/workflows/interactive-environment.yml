@@ -81,6 +81,7 @@ jobs:
 
             // Function to check if all questions are answered
             const checkAnswers = async () => {
+              console.log('Checking for user responses...');
               const comments = await github.rest.issues.listComments({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -93,7 +94,12 @@ jobs:
                 .filter(c => c.user.login === context.actor)
                 .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
               
-              if (!userResponses) return false;
+              if (!userResponses) {
+                console.log('No user responses found');
+                return false;
+              }
+              
+              console.log('Found user response:', userResponses.body);
               
               // Parse the response
               const services = ['nestjs-api', 'vue-frontend', 'prestashop', 'mysql', 'redis'];
@@ -101,12 +107,22 @@ jobs:
                 userResponses.body.includes(`- [x] ${service}`)
               );
               
-              const ttl = userResponses.body.match(/\[x\] .* \((.*?)\)/)?.[1];
+              console.log('Selected services:', selectedServices);
               
-              if (!selectedServices.length || !ttl) return false;
+              const ttlMatch = userResponses.body.match(/\[x\] .* \((.*?)\)/);
+              const ttl = ttlMatch ? ttlMatch[1] : null;
+              
+              console.log('Selected TTL:', ttl);
+              
+              if (!selectedServices.length || !ttl) {
+                console.log('Missing required selections');
+                return false;
+              }
               
               // Create environment
               const envName = `env-${context.actor}-${context.issue.number}`;
+              
+              console.log('Creating environment:', envName);
               
               // Create ArgoCD application
               const application = {
@@ -153,26 +169,32 @@ jobs:
                 }
               };
               
-              await exec.exec('kubectl', [
-                'apply',
-                '-f',
-                '-'
-              ], {
-                input: JSON.stringify(application)
-              });
+              // Create a new file with the ArgoCD application
+              const fs = require('fs');
+              fs.writeFileSync(
+                `argocd-app-${envName}.yaml`,
+                JSON.stringify(application, null, 2)
+              );
               
-              // Create a new success comment instead of updating
+              // Create a new success comment with instructions
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
-                body: `## ✅ Environment Created Successfully!
+                body: `## ✅ Environment Configuration Generated!
                 
-                Your environment has been created with the following configuration:
+                Your environment configuration has been generated. To apply it locally:
+
+                1. Download the generated file: \`argocd-app-${envName}.yaml\`
+                2. Apply it to your local cluster:
+                   \`\`\`bash
+                   kubectl apply -f argocd-app-${envName}.yaml
+                   \`\`\`
                 
-                **Environment Name:** \`${envName}\`
-                **TTL:** \`${ttl}\`
-                **Services:** \`${selectedServices.join(', ')}\`
+                **Configuration Details:**
+                - **Environment Name:** \`${envName}\`
+                - **TTL:** \`${ttl}\`
+                - **Services:** \`${selectedServices.join(', ')}\`
                 
                 The environment will be automatically deleted after the specified TTL.`
               });
