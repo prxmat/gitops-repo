@@ -1,6 +1,8 @@
 name: Interactive Environment Bot
 
 on:
+  pull_request:
+    types: [opened, synchronize, reopened]
   issue_comment:
     types: [created]
 
@@ -21,10 +23,10 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const command = context.payload.comment.body.trim();
+            const command = context.payload.comment?.body?.trim() || '';
 
             // Ignore bot's own comments
-            if (context.payload.comment.user.type === 'Bot') return;
+            if (context.payload.comment?.user?.type === 'Bot') return;
 
             // Get the latest bot comment to determine the current state
             const comments = await github.rest.issues.listComments({
