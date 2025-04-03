@@ -1,0 +1,32 @@
+name: Post interactive deployment comment
+
+on:
+  pull_request:
+    types: [opened]
+
+jobs:
+  post-comment:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post interactive comment
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `
+## 🚀 Déploiement interactif
+
+Clique sur les liens ci-dessous pour choisir ton environnement :
+
+| Backend | Frontend | Base de données |
+|---------|----------|-----------------|
+| [Nest.js](https://github.com/${context.repo.owner}/${context.repo.repo}/issues/${context.issue.number}#issuecomment-new?body=/deploy+backend=nest) | [Vue.js](https://github.com/${context.repo.owner}/${context.repo.repo}/issues/${context.issue.number}#issuecomment-new?body=/deploy+frontend=vue) | [MySQL](https://github.com/${context.repo.owner}/${context.repo.repo}/issues/${context.issue.number}#issuecomment-new?body=/deploy+db=mysql) |
+| [Express](https://github.com/${context.repo.owner}/${context.repo.repo}/issues/${context.issue.number}#issuecomment-new?body=/deploy+backend=express) | [React](https://github.com/${context.repo.owner}/${context.repo.repo}/issues/${context.issue.number}#issuecomment-new?body=/deploy+frontend=react) | [Postgres](https://github.com/${context.repo.owner}/${context.repo.repo}/issues/${context.issue.number}#issuecomment-new?body=/deploy+db=postgres) |
+
+Clique simplement sur les choix que tu veux pour créer ton environnement personnalisé ✨
+`
+            });

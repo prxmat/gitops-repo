@@ -1,0 +1,57 @@
+name: Generate Helm values for PR
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  generate-values:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Create Helm values file for PR
+        run: |
+          mkdir -p gitops/charts/unified-app/pr-environments
+          cat <<EOF > gitops/charts/unified-app/pr-environments/pr-${{ github.event.pull_request.number }}-values.yaml
+image:
+  tag: "${{ github.head_ref }}"
+
+replicaCount: 1
+
+global:
+  environment: "pr-${{ github.event.pull_request.number }}"
+EOF
+
+      - name: Commit and push Helm values file
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b pr/${{ github.event.pull_request.number }}-helm-values
+          git add gitops/charts/unified-app/pr-environments/
+          git commit -m "chore: add helm values for PR #${{ github.event.pull_request.number }}"
+          git push origin pr/${{ github.event.pull_request.number }}-helm-values --force
+
+      - name: Comment PR
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const prNumber = context.issue.number;
+            await github.rest.issues.createComment({
+              issue_number: prNumber,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `
+🚀 Un fichier de valeurs Helm a été généré pour cette PR et poussé sur la branche :
+
+\`pr/${prNumber}-helm-values\`
+
+ArgoCD va détecter automatiquement ce fichier et l'utiliser pour déployer l'environnement correspondant.
+              `
+            });
