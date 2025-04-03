@@ -13,30 +13,6 @@ spec:
       values: |
         global:
           environment: development
-        
-        nestjs:
-          enabled: true
-          image:
-            repository: nestjs-api
-            tag: latest
-          service:
-            type: ClusterIP
-            port: 3000
-          ingress:
-            enabled: true
-            host: api.local
-        
-        vuejs:
-          enabled: true
-          image:
-            repository: vue-frontend
-            tag: latest
-          service:
-            type: ClusterIP
-            port: 80
-          ingress:
-            enabled: true
-            host: app.local
   destination:
     server: https://kubernetes.default.svc
     namespace: development
