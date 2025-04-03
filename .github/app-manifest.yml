@@ -1,0 +1,12 @@
+name: Environment Setup Bot
+description: Interactive bot for creating test environments
+url: https://github.com/prxmat/gitops-repo
+hook_attributes:
+  url: https://github.com/prxmat/gitops-repo/.github/workflows/interactive-environment.yml
+  content_type: json
+  insecure_ssl: false
+default_permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  metadata: read 
