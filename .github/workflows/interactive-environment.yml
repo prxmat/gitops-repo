@@ -30,6 +30,30 @@ jobs:
     steps:
       - uses: actions/checkout@v3
 
+      - name: Add PR Button
+        uses: actions/github-script@v6
+        if: github.event_name == 'pull_request'
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            const { owner, repo, number } = context.repo;
+
+            // Add the button to the PR
+            await github.rest.pulls.createReview({
+              owner,
+              repo,
+              pull_number: number,
+              event: 'COMMENT',
+              body: `## 🚀 Environment Setup
+
+              Click the button below to create a test environment for this PR.
+
+              <form>
+                <input type="hidden" name="action" value="create_env">
+                <button type="submit">Create Environment</button>
+              </form>`
+            });
+
       - name: Process Command
         uses: actions/github-script@v6
         with:
@@ -55,8 +79,8 @@ jobs:
             const lastBotComment = botComments[0];
             const isNewConversation = !lastBotComment || !lastBotComment.body.includes('Current Step:');
 
-            // Handle /create-env command
-            if (command === '/create-env') {
+            // Handle create-env action
+            if (command === '/create-env' || (context.payload.comment?.body?.includes('<form>') && new URLSearchParams(context.payload.comment.body).get('action') === 'create_env')) {
               await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
@@ -386,7 +410,7 @@ jobs:
                   issue_number: context.issue.number,
                   body: `## ❌ Environment Creation Cancelled
 
-                  The environment creation process has been cancelled. You can start over by typing \`/create-env\`.`
+                  The environment creation process has been cancelled. You can start over by clicking the "Create Environment" button.`
                 });
               }
             }

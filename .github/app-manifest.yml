@@ -9,4 +9,18 @@ default_permissions:
   contents: read
   pull-requests: write
   issues: write
-  metadata: read 
+  metadata: read
+  checks: write
+pull_request_buttons:
+  - name: create_environment
+    label: Create Environment
+    description: Create a test environment for this PR
+    style: primary
+    action: create_env
+ui_extensions:
+  - name: environment-creator
+    description: Create test environments for your PRs
+    url: https://github.com/prxmat/gitops-repo/env-creator/public/github-iframe.html
+    target: pull_request
+    icon: 🚀
+    button_text: Create Environment 
