@@ -19,6 +19,11 @@ permissions:
   issues: write
   checks: write
 
+env:
+  APP_ID: 1202689
+  CLIENT_ID: Iv23lid5nqw0qn4Z1gE6
+  CLIENT_SECRET: 25438b7fa42aebde79cd30ede94ba94ddb3c4f97
+
 jobs:
   handle-command:
     runs-on: ubuntu-latest
