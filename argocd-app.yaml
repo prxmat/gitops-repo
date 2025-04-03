@@ -6,37 +6,13 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/mRoux/gitops-repo.git
+    repoURL: https://github.com/prxmat/gitops-repo.git
     targetRevision: HEAD
     path: gitops/charts/unified-app
     helm:
       values: |
         global:
           environment: development
-        
-        nestjs:
-          enabled: true
-          image:
-            repository: nestjs-api
-            tag: latest
-          service:
-            type: ClusterIP
-            port: 3000
-          ingress:
-            enabled: true
-            host: api.local
-        
-        vuejs:
-          enabled: true
-          image:
-            repository: vue-frontend
-            tag: latest
-          service:
-            type: ClusterIP
-            port: 80
-          ingress:
-            enabled: true
-            host: app.local
   destination:
     server: https://kubernetes.default.svc
     namespace: development

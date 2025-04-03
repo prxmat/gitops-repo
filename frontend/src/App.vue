@@ -1,3 +1,4 @@
+<!-- Main App Component -->
 <template>
   <div id="app">
     <nav>
@@ -7,6 +8,12 @@
     <router-view/>
   </div>
 </template>
+
+<script>
+export default {
+  name: 'App'
+}
+</script>
 
 <style>
 #app {

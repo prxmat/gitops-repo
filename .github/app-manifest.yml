@@ -1,0 +1,26 @@
+name: Environment Setup Bot
+description: Interactive bot for creating test environments
+url: https://github.com/prxmat/gitops-repo
+hook_attributes:
+  url: https://github.com/prxmat/gitops-repo/.github/workflows/interactive-environment.yml
+  content_type: json
+  insecure_ssl: false
+default_permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  metadata: read
+  checks: write
+pull_request_buttons:
+  - name: create_environment
+    label: Create Environment
+    description: Create a test environment for this PR
+    style: primary
+    action: create_env
+ui_extensions:
+  - name: environment-creator
+    description: Create test environments for your PRs
+    url: https://github.com/prxmat/gitops-repo/env-creator/public/github-iframe.html
+    target: pull_request
+    icon: 🚀
+    button_text: Create Environment 

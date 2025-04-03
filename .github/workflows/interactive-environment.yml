@@ -1,189 +1,416 @@
-name: Interactive Environment Creation
+name: Interactive Environment Bot
 
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  pull_request_review_comment:
+    types: [created]
+  issue_comment:
+    types: [created]
+  check_run:
+    types: [completed]
+  check_suite:
+    types: [completed]
+
+# Ajout des permissions nécessaires
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  checks: write
+
+env:
+  APP_ID: 1202689
+  CLIENT_ID: Iv23lid5nqw0qn4Z1gE6
+  CLIENT_SECRET: 25438b7fa42aebde79cd30ede94ba94ddb3c4f97
 
 jobs:
-  create-environment:
+  handle-command:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3
 
-      - name: Install ArgoCD CLI
-        run: |
-          curl -sSL -o argocd-linux-amd64 https://github.com/argoproj/argo-cd/releases/latest/download/argocd-linux-amd64
-          sudo install -m 555 argocd-linux-amd64 /usr/local/bin/argocd
-          rm argocd-linux-amd64
-
-      - name: Setup Environment Bot
+      - name: Add PR Button
         uses: actions/github-script@v6
+        if: github.event_name == 'pull_request'
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            // Create initial comment with questions
-            const services = [
-              { name: 'nestjs-api', label: 'NestJS API' },
-              { name: 'vue-frontend', label: 'Vue.js Frontend' },
-              { name: 'prestashop', label: 'PrestaShop' },
-              { name: 'mysql', label: 'MySQL' },
-              { name: 'redis', label: 'Redis' }
-            ];
+            const { owner, repo, number } = context.repo;
 
-            const ttlOptions = [
-              { value: '1h', label: '1 hour' },
-              { value: '24h', label: '24 hours' },
-              { value: '7d', label: '7 days' },
-              { value: '30d', label: '30 days' }
-            ];
+            // Add the button to the PR
+            await github.rest.pulls.createReview({
+              owner,
+              repo,
+              pull_number: number,
+              event: 'COMMENT',
+              body: `## 🚀 Environment Setup
 
-            const servicesCheckboxes = services.map(s => `- [ ] ${s.label}`).join('\n');
-            const ttlOptionsList = ttlOptions.map(o => `- [ ] ${o.label} (${o.value})`).join('\n');
+              Click the button below to create a test environment for this PR.
 
-            const comment = `## 🚀 Environment Setup Bot
-
-            Hi @${context.actor}! I'll help you set up your environment. Please answer the following questions:
-
-            ### 1. Which services do you need?
-            ${servicesCheckboxes}
-
-            ### 2. How long should this environment exist?
-            ${ttlOptionsList}
-
-            ### 3. Resource Limits (Optional)
-            Would you like to customize resource limits?
-            - [ ] Yes, customize limits
-            - [ ] No, use defaults
-
-            Please check the boxes above and I'll create your environment accordingly.`;
-
-            await github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: comment
+              <form>
+                <input type="hidden" name="action" value="create_env">
+                <button type="submit">Create Environment</button>
+              </form>`
             });
 
-            // Store the comment ID for later updates
-            core.setOutput('comment_id', context.payload.comment.id);
-
-      - name: Monitor Responses
+      - name: Process Command
         uses: actions/github-script@v6
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            // Function to check if all questions are answered
-            const checkAnswers = async () => {
-              const comments = await github.rest.issues.listComments({
+            const command = context.payload.comment?.body?.trim() || '';
+
+            // Ignore bot's own comments
+            if (context.payload.comment?.user?.type === 'Bot') return;
+
+            // Get the latest bot comment to determine the current state
+            const comments = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              per_page: 100
+            });
+
+            const botComments = comments.data
+              .filter(c => c.user.type === 'Bot')
+              .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+            const lastBotComment = botComments[0];
+            const isNewConversation = !lastBotComment || !lastBotComment.body.includes('Current Step:');
+
+            // Handle create-env action
+            if (command === '/create-env' || (context.payload.comment?.body?.includes('<form>') && new URLSearchParams(context.payload.comment.body).get('action') === 'create_env')) {
+              await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
                 issue_number: context.issue.number,
-                per_page: 100
+                body: `## 🚀 Environment Setup Bot
+
+                Hi @${context.actor}! I'll help you set up your environment.
+
+                Current Step: 1/3 - Services Selection
+
+                ### Which services do you need?
+                
+                - [ ] NestJS API
+                - [ ] Vue.js Frontend
+                - [ ] PrestaShop
+                - [ ] MySQL
+                - [ ] Redis
+
+                <details>
+                  <summary>Next</summary>
+                  <form>
+                    <input type="hidden" name="action" value="next">
+                    <input type="hidden" name="step" value="1">
+                    <button type="submit">Next</button>
+                  </form>
+                </details>`
               });
-              
-              // Find the latest response from the user
-              const userResponses = comments.data
-                .filter(c => c.user.login === context.actor)
-                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
-              
-              if (!userResponses) return false;
-              
-              // Parse the response
-              const services = ['nestjs-api', 'vue-frontend', 'prestashop', 'mysql', 'redis'];
-              const selectedServices = services.filter(service => 
-                userResponses.body.includes(`- [x] ${service}`)
-              );
-              
-              const ttl = userResponses.body.match(/\[x\] .* \((.*?)\)/)?.[1];
-              
-              if (!selectedServices.length || !ttl) return false;
-              
-              // Create environment
-              const envName = `env-${context.actor}-${context.issue.number}`;
-              
-              // Create namespace
-              await exec.exec('kubectl', [
-                'create', 'namespace', envName,
-                '--dry-run=client',
-                '-o', 'yaml'
-              ]);
-              
-              // Create ArgoCD application
-              const application = {
-                apiVersion: 'argoproj.io/v1alpha1',
-                kind: 'Application',
-                metadata: {
-                  name: envName,
-                  namespace: 'argocd',
-                  annotations: {
-                    'argocd.argoproj.io/ttl': ttl
-                  }
-                },
-                spec: {
-                  project: 'default',
-                  source: {
-                    repoURL: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}`,
-                    targetRevision: context.payload.pull_request.head.ref,
-                    path: 'gitops/charts/unified-app'
-                  },
-                  destination: {
-                    server: 'https://kubernetes.default.svc',
-                    namespace: envName
-                  },
-                  syncPolicy: {
-                    automated: {
-                      prune: true,
-                      selfHeal: true
-                    },
-                    syncOptions: ['CreateNamespace=true']
-                  },
-                  helm: {
-                    values: `
-                      global:
-                        environment: ${envName}
-                        ttl:
-                          enabled: true
-                          duration: "${ttl}"
-                      ${services.map(service => `
-                      ${service}:
-                        enabled: ${selectedServices.includes(service)}
-                      `).join('\n')}
-                    `
-                  }
-                }
-              };
-              
-              await exec.exec('kubectl', [
-                'apply',
-                '-f',
-                '-'
-              ], {
-                input: JSON.stringify(application)
-              });
-              
-              // Update the comment with success message
-              await github.rest.issues.updateComment({
+            }
+
+            // Handle /help command
+            else if (command === '/help') {
+              await github.rest.issues.createComment({
                 owner: context.repo.owner,
                 repo: context.repo.repo,
-                comment_id: context.payload.comment.id,
-                body: `## ✅ Environment Created Successfully!
-                
-                Your environment has been created with the following configuration:
-                
-                **Environment Name:** \`${envName}\`
-                **TTL:** \`${ttl}\`
-                **Services:** \`${selectedServices.join(', ')}\`
-                
-                The environment will be automatically deleted after the specified TTL.`
+                issue_number: context.issue.number,
+                body: `## 🤖 Environment Bot Help
+
+                Available commands:
+                - \`/create-env\`: Start the environment creation wizard
+                - \`/help\`: Show this help message
+
+                During environment creation:
+                - Use the checkboxes to select services
+                - Click "Next" to proceed to the next step
+                - Click "Back" to go to the previous step
+                - Click "Cancel" to cancel the creation`
               });
-              
-              return true;
-            };
+            }
 
-            // Poll for answers
-            let attempts = 0;
-            const maxAttempts = 10;
+            // Handle form submissions
+            else if (context.payload.comment?.body?.includes('<form>')) {
+              const formData = new URLSearchParams(context.payload.comment.body);
+              const action = formData.get('action');
+              const step = parseInt(formData.get('step'));
 
-            while (attempts < maxAttempts) {
-              if (await checkAnswers()) break;
-              await new Promise(resolve => setTimeout(resolve, 60000)); // Wait 1 minute
-              attempts++;
+              if (action === 'next') {
+                if (step === 1) {
+                  // Get selected services
+                  const selectedServices = ['nestjs-api', 'vue-frontend', 'prestashop', 'mysql', 'redis']
+                    .filter(service => lastBotComment.body.includes(`- [x] ${service}`));
+                  
+                  if (selectedServices.length === 0) {
+                    await github.rest.issues.createComment({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      issue_number: context.issue.number,
+                      body: `❌ Please select at least one service before proceeding.`
+                    });
+                    return;
+                  }
+                  
+                  // Store selected services
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.issue.number,
+                    body: `Selected services: ${selectedServices.join(', ')}`
+                  });
+                  
+                  // Ask for TTL
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.issue.number,
+                    body: `## 🚀 Environment Setup Bot
+
+                    Current Step: 2/3 - Duration Selection
+
+                    ### How long should this environment exist?
+                    
+                    - [ ] 1 hour (1h)
+                    - [ ] 24 hours (24h)
+                    - [ ] 7 days (7d)
+                    - [ ] 30 days (30d)
+
+                    <details>
+                      <summary>Next</summary>
+                      <form>
+                        <input type="hidden" name="action" value="next">
+                        <input type="hidden" name="step" value="2">
+                        <button type="submit">Next</button>
+                      </form>
+                    </details>
+                    <details>
+                      <summary>Back</summary>
+                      <form>
+                        <input type="hidden" name="action" value="back">
+                        <input type="hidden" name="step" value="2">
+                        <button type="submit">Back</button>
+                      </form>
+                    </details>`
+                  });
+                }
+                else if (step === 2) {
+                  // Get selected TTL
+                  const ttlMatch = lastBotComment.body.match(/\[x\] .* \((.*?)\)/);
+                  if (!ttlMatch) {
+                    await github.rest.issues.createComment({
+                      owner: context.repo.owner,
+                      repo: context.repo.repo,
+                      issue_number: context.issue.number,
+                      body: `❌ Please select a duration before proceeding.`
+                    });
+                    return;
+                  }
+                  
+                  const ttl = ttlMatch[1];
+                  
+                  // Store selected TTL
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.issue.number,
+                    body: `Selected duration: ${ttl}`
+                  });
+                  
+                  // Ask for resource limits
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.issue.number,
+                    body: `## 🚀 Environment Setup Bot
+
+                    Current Step: 3/3 - Resource Limits
+
+                    ### Would you like to customize resource limits?
+                    
+                    - [ ] Yes, customize limits
+                    - [ ] No, use defaults
+
+                    <details>
+                      <summary>Next</summary>
+                      <form>
+                        <input type="hidden" name="action" value="next">
+                        <input type="hidden" name="step" value="3">
+                        <button type="submit">Next</button>
+                      </form>
+                    </details>
+                    <details>
+                      <summary>Back</summary>
+                      <form>
+                        <input type="hidden" name="action" value="back">
+                        <input type="hidden" name="step" value="3">
+                        <button type="submit">Back</button>
+                      </form>
+                    </details>
+                    <details>
+                      <summary>Cancel</summary>
+                      <form>
+                        <input type="hidden" name="action" value="cancel">
+                        <button type="submit">Cancel</button>
+                      </form>
+                    </details>`
+                  });
+                }
+                else if (step === 3) {
+                  // Get selected services and TTL from previous comments
+                  const servicesComment = botComments.find(c => c.body.startsWith('Selected services:'));
+                  const ttlComment = botComments.find(c => c.body.startsWith('Selected duration:'));
+                  
+                  const selectedServices = servicesComment.body.replace('Selected services: ', '').split(', ');
+                  const ttl = ttlComment.body.replace('Selected duration: ', '');
+                  
+                  const envName = `env-${context.actor}-${context.issue.number}`;
+                  
+                  const application = {
+                    apiVersion: 'argoproj.io/v1alpha1',
+                    kind: 'Application',
+                    metadata: {
+                      name: envName,
+                      namespace: 'argocd',
+                      annotations: {
+                        'argocd.argoproj.io/ttl': ttl
+                      }
+                    },
+                    spec: {
+                      project: 'default',
+                      source: {
+                        repoURL: `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}`,
+                        targetRevision: context.payload.pull_request.head.ref,
+                        path: 'gitops/charts/unified-app'
+                      },
+                      destination: {
+                        server: 'https://kubernetes.default.svc',
+                        namespace: envName
+                      },
+                      syncPolicy: {
+                        automated: {
+                          prune: true,
+                          selfHeal: true
+                        },
+                        syncOptions: ['CreateNamespace=true']
+                      },
+                      helm: {
+                        values: `
+                          global:
+                            environment: ${envName}
+                            ttl:
+                              enabled: true
+                              duration: "${ttl}"
+                          ${['nestjs-api', 'vue-frontend', 'prestashop', 'mysql', 'redis'].map(service => `
+                          ${service}:
+                            enabled: ${selectedServices.includes(service)}
+                          `).join('\n')}
+                        `
+                      }
+                    }
+                  };
+                  
+                  const fs = require('fs');
+                  fs.writeFileSync(
+                    `argocd-app-${envName}.yaml`,
+                    JSON.stringify(application, null, 2)
+                  );
+                  
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.issue.number,
+                    body: `## ✅ Environment Configuration Generated!
+                    
+                    Your environment configuration has been generated. To apply it locally:
+
+                    1. Download the generated file: \`argocd-app-${envName}.yaml\`
+                    2. Apply it to your local cluster:
+                       \`\`\`bash
+                       kubectl apply -f argocd-app-${envName}.yaml
+                       \`\`\`
+                    
+                    **Configuration Details:**
+                    - **Environment Name:** \`${envName}\`
+                    - **TTL:** \`${ttl}\`
+                    - **Services:** \`${selectedServices.join(', ')}\`
+                    
+                    The environment will be automatically deleted after the specified TTL.`
+                  });
+                }
+              }
+              else if (action === 'back' && step > 1) {
+                // Go back to previous step
+                if (step === 2) {
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.issue.number,
+                    body: `## 🚀 Environment Setup Bot
+
+                    Current Step: 1/3 - Services Selection
+
+                    ### Which services do you need?
+                    
+                    - [ ] NestJS API
+                    - [ ] Vue.js Frontend
+                    - [ ] PrestaShop
+                    - [ ] MySQL
+                    - [ ] Redis
+
+                    <details>
+                      <summary>Next</summary>
+                      <form>
+                        <input type="hidden" name="action" value="next">
+                        <input type="hidden" name="step" value="1">
+                        <button type="submit">Next</button>
+                      </form>
+                    </details>`
+                  });
+                }
+                else if (step === 3) {
+                  await github.rest.issues.createComment({
+                    owner: context.repo.owner,
+                    repo: context.repo.repo,
+                    issue_number: context.issue.number,
+                    body: `## 🚀 Environment Setup Bot
+
+                    Current Step: 2/3 - Duration Selection
+
+                    ### How long should this environment exist?
+                    
+                    - [ ] 1 hour (1h)
+                    - [ ] 24 hours (24h)
+                    - [ ] 7 days (7d)
+                    - [ ] 30 days (30d)
+
+                    <details>
+                      <summary>Next</summary>
+                      <form>
+                        <input type="hidden" name="action" value="next">
+                        <input type="hidden" name="step" value="2">
+                        <button type="submit">Next</button>
+                      </form>
+                    </details>
+                    <details>
+                      <summary>Back</summary>
+                      <form>
+                        <input type="hidden" name="action" value="back">
+                        <input type="hidden" name="step" value="2">
+                        <button type="submit">Back</button>
+                      </form>
+                    </details>`
+                  });
+                }
+              }
+              else if (action === 'cancel') {
+                await github.rest.issues.createComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  issue_number: context.issue.number,
+                  body: `## ❌ Environment Creation Cancelled
+
+                  The environment creation process has been cancelled. You can start over by clicking the "Create Environment" button.`
+                });
+              }
             }

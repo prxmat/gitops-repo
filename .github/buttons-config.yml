@@ -1,0 +1,13 @@
+buttons:
+  - name: next
+    label: Next
+    style: primary
+    action: next
+  - name: back
+    label: Back
+    style: secondary
+    action: back
+  - name: cancel
+    label: Cancel
+    style: danger
+    action: cancel 
