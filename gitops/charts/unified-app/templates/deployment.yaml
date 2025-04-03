@@ -1,0 +1,68 @@
+{{- range $key, $value := .Values }}
+{{- if and (kindIs "map" $value) (hasKey $value "enabled") (hasKey $value "image") }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ $key }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "unified-app.labels" $ | nindent 4 }}
+    app: {{ $key }}
+  annotations:
+    {{- if $.Values.global.ttl.enabled }}
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+    "helm.sh/hook-weight": "-5"
+    "helm.sh/hook": pre-install,pre-upgrade
+    {{- end }}
+spec:
+  replicas: {{ $value.replicas | default 1 }}
+  selector:
+    matchLabels:
+      {{- include "unified-app.selectorLabels" $ | nindent 6 }}
+      app: {{ $key }}
+  template:
+    metadata:
+      labels:
+        {{- include "unified-app.selectorLabels" $ | nindent 8 }}
+        app: {{ $key }}
+    spec:
+      containers:
+        - name: {{ $key }}
+          image: "{{ $value.image.repository }}:{{ $value.image.tag }}"
+          ports:
+            - containerPort: {{ $value.port }}
+              name: http
+          resources:
+            {{- toYaml $value.resources | nindent 12 }}
+          env:
+            {{- toYaml $value.env | nindent 12 }}
+          {{- if hasKey $value "livenessProbe" }}
+          livenessProbe:
+            {{- toYaml $value.livenessProbe | nindent 12 }}
+          {{- end }}
+          {{- if hasKey $value "readinessProbe" }}
+          readinessProbe:
+            {{- toYaml $value.readinessProbe | nindent 12 }}
+          {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $key }}
+  namespace: {{ $.Release.Namespace }}
+  labels:
+    {{- include "unified-app.labels" $ | nindent 4 }}
+    app: {{ $key }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ $value.port }}
+      targetPort: http
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "unified-app.selectorLabels" $ | nindent 4 }}
+    app: {{ $key }}
+{{- end }}
+{{- end }}

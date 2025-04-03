@@ -1,0 +1,170 @@
+global:
+  environment: development
+  monitoring:
+    enabled: true
+    otel:
+      collector:
+        enabled: true
+        endpoint: "http://otel-collector:4317"
+  backup:
+    enabled: false  # Désactivé en local
+  notifications:
+    slack:
+      enabled: false  # Désactivé en local
+  gcp:
+    project: "local"
+    region: "local"
+    workloadIdentity:
+      enabled: false
+    monitoring:
+      enabled: false
+
+# Application specific configurations
+nestjs-api:
+  enabled: true
+  image:
+    repository: "localhost:5000/nestjs-api"
+    tag: "latest"
+  replicas: 1
+  resources:
+    limits:
+      cpu: 500m
+      memory: 512Mi
+    requests:
+      cpu: 250m
+      memory: 256Mi
+  env:
+    - name: NODE_ENV
+      value: development
+    - name: PORT
+      value: "3000"
+    - name: DATABASE_URL
+      value: "mysql://user:password@mysql:3306/dbname"
+    - name: REDIS_URL
+      value: "redis://redis:6379"
+  monitoring:
+    metrics:
+      - name: nestjs_requests_total
+        type: counter
+      - name: nestjs_response_time_seconds
+        type: histogram
+      - name: nestjs_active_connections
+        type: gauge
+      - name: nestjs_error_count
+        type: counter
+      - name: nestjs_db_query_duration_seconds
+        type: histogram
+  healthCheck:
+    enabled: true
+    path: "/health"
+    port: 3000
+  scaling:
+    enabled: false  # Désactivé en local
+
+vue-frontend:
+  enabled: true
+  image:
+    repository: "localhost:5000/vue-frontend"
+    tag: "latest"
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  env:
+    - name: NODE_ENV
+      value: development
+    - name: VITE_API_URL
+      value: "http://localhost:3000"
+  monitoring:
+    metrics:
+      - name: vue_page_loads_total
+        type: counter
+      - name: vue_api_calls_total
+        type: counter
+      - name: vue_error_count
+        type: counter
+  ingress:
+    enabled: true
+    host: "localhost"
+    path: "/"
+    tls:
+      enabled: false  # Désactivé en local
+
+# Common services
+mysql:
+  enabled: true
+  version: "8.0"
+  resources:
+    limits:
+      cpu: 500m
+      memory: 1Gi
+    requests:
+      cpu: 250m
+      memory: 512Mi
+  persistence:
+    size: 5Gi
+  monitoring:
+    metrics:
+      - name: mysql_connections
+        type: gauge
+      - name: mysql_queries_total
+        type: counter
+      - name: mysql_slow_queries
+        type: counter
+      - name: mysql_replication_lag
+        type: gauge
+
+redis:
+  enabled: true
+  version: "7.0"
+  resources:
+    limits:
+      cpu: 200m
+      memory: 256Mi
+    requests:
+      cpu: 100m
+      memory: 128Mi
+  persistence:
+    size: 2Gi
+  monitoring:
+    metrics:
+      - name: redis_connected_clients
+        type: gauge
+      - name: redis_commands_total
+        type: counter
+      - name: redis_memory_used
+        type: gauge
+      - name: redis_hit_rate
+        type: gauge
+
+# Monitoring stack
+monitoring:
+  otel-collector:
+    enabled: true
+    resources:
+      limits:
+        cpu: 500m
+        memory: 512Mi
+      requests:
+        cpu: 250m
+        memory: 256Mi
+    config:
+      receivers:
+        otlp:
+          protocols:
+            grpc:
+              endpoint: 0.0.0.0:4317
+            http:
+              endpoint: 0.0.0.0:4318
+      processors:
+        batch:
+          timeout: 1s
+          send_batch_size: 1024
+      exporters:
+        logging:
+          loglevel: debug
+        prometheus:
+          endpoint: "0.0.0.0:8889" 

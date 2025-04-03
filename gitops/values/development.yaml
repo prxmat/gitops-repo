@@ -1,0 +1,163 @@
+global:
+  environment: development
+  monitoring:
+    enabled: true
+    otel:
+      collector:
+        endpoint: "http://otel-collector:4317"
+  backup:
+    enabled: true
+    schedule: "0 0 * * *"
+    retention: 7
+  notifications:
+    enabled: true
+    slack:
+      webhook: "https://hooks.slack.com/services/YOUR/WEBHOOK/URL"
+      channel: "#deployments"
+  gcp:
+    project: "your-project-id"
+    region: "europe-west1"
+    bucket: "your-backup-bucket"
+    workload_identity:
+      enabled: false
+      service_account: "your-service-account@your-project.iam.gserviceaccount.com"
+
+nestjs-api:
+  enabled: true
+  replicas: 1
+  image:
+    repository: "gcr.io/your-project/nestjs-api"
+    tag: "latest"
+  port: 3000
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+  env:
+    - name: NODE_ENV
+      value: "development"
+    - name: DATABASE_URL
+      value: "mysql://user:password@mysql:3306/dbname"
+  healthCheck:
+    enabled: true
+    path: "/health"
+    port: 3000
+
+vue-frontend:
+  enabled: true
+  replicas: 1
+  image:
+    repository: "gcr.io/your-project/vue-frontend"
+    tag: "latest"
+  port: 80
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+    requests:
+      cpu: "250m"
+      memory: "256Mi"
+  env:
+    - name: NODE_ENV
+      value: "development"
+    - name: API_URL
+      value: "http://nestjs-api:3000"
+  healthCheck:
+    enabled: true
+    path: "/"
+    port: 80
+
+common-services:
+  mysql:
+    enabled: true
+    image:
+      repository: "mysql"
+      tag: "8.0"
+    resources:
+      limits:
+        cpu: "1"
+        memory: "1Gi"
+      requests:
+        cpu: "500m"
+        memory: "512Mi"
+    persistence:
+      size: "10Gi"
+    env:
+      - name: MYSQL_ROOT_PASSWORD
+        value: "rootpassword"
+      - name: MYSQL_DATABASE
+        value: "dbname"
+      - name: MYSQL_USER
+        value: "user"
+      - name: MYSQL_PASSWORD
+        value: "password"
+    healthCheck:
+      enabled: true
+      port: 3306
+
+  redis:
+    enabled: true
+    image:
+      repository: "redis"
+      tag: "7.0"
+    resources:
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+      requests:
+        cpu: "250m"
+        memory: "256Mi"
+    persistence:
+      size: "5Gi"
+    healthCheck:
+      enabled: true
+      port: 6379
+
+monitoring:
+  otel-collector:
+    enabled: true
+    image:
+      repository: "otel/opentelemetry-collector"
+      tag: "0.88.0"
+    resources:
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+      requests:
+        cpu: "250m"
+        memory: "256Mi"
+    config:
+      receivers:
+        otlp:
+          protocols:
+            grpc:
+              endpoint: "0.0.0.0:4317"
+            http:
+              endpoint: "0.0.0.0:4318"
+      processors:
+        batch:
+          timeout: 1s
+          send_batch_size: 1024
+        resource:
+          attributes:
+            - action: insert
+              key: cloud.provider
+              value: gcp
+            - action: insert
+              key: cloud.platform
+              value: gke
+            - action: insert
+              key: k8s.cluster.name
+              value: "your-cluster-name"
+      exporters:
+        prometheus:
+          endpoint: "0.0.0.0:8889"
+        googlecloud:
+          project: "your-project-id"
+          metric:
+            prefix: "custom.googleapis.com"
+          log:
+            default_log_name: "application" 

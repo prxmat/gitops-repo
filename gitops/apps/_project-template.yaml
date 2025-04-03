@@ -1,0 +1,29 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: test-{{project}}-{{user}}
+  namespace: argocd
+  labels:
+    env: test
+    project: {{project}}
+    user: {{user}}
+  annotations:
+    environment/ttl: "{{ttlHours}}h"
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/PrestaShopCorp/gitops-repo-mat
+    targetRevision: HEAD
+    path: charts/{{project}}
+    helm:
+      valueFiles:
+        - ../../values/{{project}}/test-{{user}}-{{timestamp}}.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: test-{{project}}-{{user}}
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true

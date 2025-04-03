@@ -1,0 +1,83 @@
+{{- if .Values.global.notifications.slack.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: slack-notifications
+data:
+  webhook: {{ .Values.global.notifications.slack.webhook }}
+  channel: {{ .Values.global.notifications.slack.channel }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: notify-slack
+  labels:
+    app: notify
+    {{- include "unified-app.labels" . | nindent 4 }}
+spec:
+  template:
+    metadata:
+      labels:
+        app: notify
+        {{- include "unified-app.selectorLabels" . | nindent 8 }}
+    spec:
+      containers:
+        - name: notify
+          image: curlimages/curl:latest
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              WEBHOOK=$(cat /etc/slack/webhook)
+              CHANNEL=$(cat /etc/slack/channel)
+              
+              # Send notification
+              curl -X POST -H 'Content-type: application/json' \
+                --data '{
+                  "channel": "'$CHANNEL'",
+                  "text": "Test Environment Status Update",
+                  "blocks": [
+                    {
+                      "type": "header",
+                      "text": {
+                        "type": "plain_text",
+                        "text": "Test Environment Status Update"
+                      }
+                    },
+                    {
+                      "type": "section",
+                      "fields": [
+                        {
+                          "type": "mrkdwn",
+                          "text": "*Environment:*\n{{ .Release.Namespace }}"
+                        },
+                        {
+                          "type": "mrkdwn",
+                          "text": "*Status:*\n{{ .Values.global.status }}"
+                        }
+                      ]
+                    },
+                    {
+                      "type": "section",
+                      "fields": [
+                        {
+                          "type": "mrkdwn",
+                          "text": "*Applications:*\n{{- range $app, $config := .Values }}{{- if and $config.enabled (ne $app "global") (ne $app "monitoring") (ne $app "backup") }}\n• {{ $app }}{{- end }}{{- end }}"
+                        },
+                        {
+                          "type": "mrkdwn",
+                          "text": "*TTL:*\n{{ .Values.global.ttl }}"
+                        }
+                      ]
+                    }
+                  ]
+                }' \
+                $WEBHOOK
+          volumeMounts:
+            - name: slack-config
+              mountPath: /etc/slack
+      volumes:
+        - name: slack-config
+          configMap:
+            name: slack-notifications
+      restartPolicy: OnFailure
+{{- end }} 

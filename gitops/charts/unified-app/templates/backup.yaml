@@ -1,0 +1,165 @@
+{{- if .Values.global.backup.enabled }}
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: backup-job
+  labels:
+    app: backup
+    {{- include "unified-app.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.global.backup.schedule }}
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          labels:
+            app: backup
+            {{- include "unified-app.selectorLabels" . | nindent 12 }}
+          {{- if .Values.global.gcp.workloadIdentity.enabled }}
+          annotations:
+            iam.gke.io/gcp-service-account: {{ .Values.global.gcp.workloadIdentity.serviceAccount }}
+          {{- end }}
+        spec:
+          {{- if .Values.global.gcp.workloadIdentity.enabled }}
+          serviceAccountName: {{ .Values.global.gcp.workloadIdentity.serviceAccount }}
+          {{- end }}
+          containers:
+            - name: backup
+              image: google/cloud-sdk:slim
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  # Backup databases
+                  {{- range $app, $config := .Values }}
+                  {{- if and $config.enabled (ne $app "global") (ne $app "monitoring") (ne $app "backup") }}
+                  {{- if $config.db }}
+                  mysqldump -h {{ $config.db.host }} -u {{ $config.db.user }} -p${MYSQL_PASSWORD} {{ $config.db.name }} > /backup/{{ $app }}-db.sql
+                  {{- end }}
+                  {{- end }}
+                  {{- end }}
+                  
+                  # Backup files
+                  {{- range $app, $config := .Values }}
+                  {{- if and $config.enabled (ne $app "global") (ne $app "monitoring") (ne $app "backup") }}
+                  tar -czf /backup/{{ $app }}-files.tar.gz /var/www/html
+                  {{- end }}
+                  {{- end }}
+                  
+                  # Upload to Google Cloud Storage
+                  gsutil -m cp -r /backup/* gs://{{ .Values.global.backup.gcp.bucket }}/{{ .Release.Namespace }}/$(date +%Y%m%d)/
+                  
+                  # Cleanup old backups
+                  gsutil -m rm -r gs://{{ .Values.global.backup.gcp.bucket }}/{{ .Release.Namespace }}/$(date -d "-{{ .Values.global.backup.retention }} days" +%Y%m%d)
+              env:
+                - name: MYSQL_PASSWORD
+                  valueFrom:
+                    secretKeyRef:
+                      name: mysql-secret
+                      key: password
+                {{- if not .Values.global.gcp.workloadIdentity.enabled }}
+                - name: GOOGLE_APPLICATION_CREDENTIALS
+                  value: /etc/gcp/service-account.json
+                {{- end }}
+              volumeMounts:
+                - name: backup-volume
+                  mountPath: /backup
+                {{- if not .Values.global.gcp.workloadIdentity.enabled }}
+                - name: gcp-key
+                  mountPath: /etc/gcp
+                {{- end }}
+          volumes:
+            - name: backup-volume
+              persistentVolumeClaim:
+                claimName: backup-pvc
+            {{- if not .Values.global.gcp.workloadIdentity.enabled }}
+            - name: gcp-key
+              secret:
+                secretName: gcp-service-account
+            {{- end }}
+          restartPolicy: OnFailure
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backup-pvc
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.global.backup.storage.size }}
+---
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: restore-job
+  labels:
+    app: restore
+    {{- include "unified-app.labels" . | nindent 4 }}
+spec:
+  template:
+    metadata:
+      labels:
+        app: restore
+        {{- include "unified-app.selectorLabels" . | nindent 8 }}
+      {{- if .Values.global.gcp.workloadIdentity.enabled }}
+      annotations:
+        iam.gke.io/gcp-service-account: {{ .Values.global.gcp.workloadIdentity.serviceAccount }}
+      {{- end }}
+    spec:
+      {{- if .Values.global.gcp.workloadIdentity.enabled }}
+      serviceAccountName: {{ .Values.global.gcp.workloadIdentity.serviceAccount }}
+      {{- end }}
+      containers:
+        - name: restore
+          image: google/cloud-sdk:slim
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              # Download from Google Cloud Storage
+              gsutil -m cp -r gs://{{ .Values.global.backup.gcp.bucket }}/{{ .Values.global.backup.restore.date }}/* /restore/
+              
+              # Restore databases
+              {{- range $app, $config := .Values }}
+              {{- if and $config.enabled (ne $app "global") (ne $app "monitoring") (ne $app "backup") }}
+              {{- if $config.db }}
+              mysql -h {{ $config.db.host }} -u {{ $config.db.user }} -p${MYSQL_PASSWORD} {{ $config.db.name }} < /restore/{{ $app }}-db.sql
+              {{- end }}
+              {{- end }}
+              {{- end }}
+              
+              # Restore files
+              {{- range $app, $config := .Values }}
+              {{- if and $config.enabled (ne $app "global") (ne $app "monitoring") (ne $app "backup") }}
+              tar -xzf /restore/{{ $app }}-files.tar.gz -C /
+              {{- end }}
+              {{- end }}
+          env:
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: mysql-secret
+                  key: password
+            {{- if not .Values.global.gcp.workloadIdentity.enabled }}
+            - name: GOOGLE_APPLICATION_CREDENTIALS
+              value: /etc/gcp/service-account.json
+            {{- end }}
+          volumeMounts:
+            - name: restore-volume
+              mountPath: /restore
+            {{- if not .Values.global.gcp.workloadIdentity.enabled }}
+            - name: gcp-key
+              mountPath: /etc/gcp
+            {{- end }}
+      volumes:
+        - name: restore-volume
+          persistentVolumeClaim:
+            claimName: restore-pvc
+        {{- if not .Values.global.gcp.workloadIdentity.enabled }}
+        - name: gcp-key
+          secret:
+            secretName: gcp-service-account
+        {{- end }}
+      restartPolicy: OnFailure
+{{- end }} 

@@ -1,0 +1,23 @@
+apiVersion: v2
+name: unified-app
+description: A Helm chart for unified application deployment
+
+type: application
+
+version: 0.1.0
+
+appVersion: "1.0.0"
+
+maintainers:
+  - name: Platform Team
+    email: platform@example.com
+
+keywords:
+  - nestjs
+  - vuejs
+  - argocd
+
+home: https://github.com/your-org/gitops-repo
+
+sources:
+  - https://github.com/your-org/gitops-repo

@@ -1,0 +1,328 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  SLACK_CHANNEL: '#deployments'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: |
+          npm ci
+          cd frontend && npm ci
+
+      - name: Run Tests
+        run: |
+          # Backend tests
+          npm run test
+          npm run test:e2e
+
+          # Frontend tests
+          cd frontend
+          npm run test:unit
+          npm run test:e2e
+
+      - name: Run Linting
+        run: |
+          npm run lint
+          cd frontend && npm run lint
+
+      - name: Build Applications
+        run: |
+          # Build NestJS
+          npm run build
+
+          # Build Vue.js
+          cd frontend
+          npm run build
+
+      - name: Run Security Scan
+        uses: snyk/actions/node@master
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        with:
+          args: --severity-threshold=high
+
+  build-and-push:
+    needs: test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/develop')
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Build and Push NestJS
+        run: |
+          docker build -t nestjs-api:${{ github.sha }} -f Dockerfile.nestjs .
+          docker tag nestjs-api:${{ github.sha }} nestjs-api:latest
+
+      - name: Build and Push Vue.js
+        run: |
+          docker build -t vue-frontend:${{ github.sha }} -f Dockerfile.vue frontend/
+          docker tag vue-frontend:${{ github.sha }} vue-frontend:latest
+
+      - name: Update Helm Values
+        run: |
+          # Update image tags in values files
+          for env in integration test staging production; do
+            yq e ".nestjs-api.image.tag = \"${{ github.sha }}\"" -i values/$env.yaml
+            yq e ".vue-frontend.image.tag = \"${{ github.sha }}\"" -i values/$env.yaml
+          done
+
+      - name: Commit Changes
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add values/
+          git commit -m "chore: update image tags to ${{ github.sha }}"
+          git push
+
+  deploy-integration:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    environment: integration
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+
+      - name: Deploy to Integration
+        run: |
+          # Deploy using Helm
+          helm upgrade --install unified-app ./gitops/charts/unified-app \
+            --namespace integration \
+            -f values/integration.yaml \
+            --set global.environment=integration \
+            --wait \
+            --timeout 5m
+
+      - name: Notify Slack
+        uses: 8398a7/action-slack@v3
+        if: always()
+        with:
+          status: ${{ job.status }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow,job,took
+          custom_payload: |
+            {
+              "attachments": [{
+                "color": "${{ job.status == 'success' && 'good' || 'danger' }}",
+                "blocks": [
+                  {
+                    "type": "header",
+                    "text": {
+                      "type": "plain_text",
+                      "text": "Integration Deployment"
+                    }
+                  },
+                  {
+                    "type": "section",
+                    "fields": [
+                      {
+                        "type": "mrkdwn",
+                        "text": "*Status:*\n${{ job.status }}"
+                      },
+                      {
+                        "type": "mrkdwn",
+                        "text": "*Environment:*\nIntegration"
+                      }
+                    ]
+                  }
+                ]
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_CHANNEL: ${{ env.SLACK_CHANNEL }}
+
+  deploy-test:
+    needs: [build-and-push, deploy-integration]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    environment: test
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+
+      - name: Deploy to Test
+        run: |
+          # Deploy using Helm
+          helm upgrade --install unified-app ./gitops/charts/unified-app \
+            --namespace test \
+            -f values/test.yaml \
+            --set global.environment=test \
+            --wait \
+            --timeout 5m
+
+      - name: Notify Slack
+        uses: 8398a7/action-slack@v3
+        if: always()
+        with:
+          status: ${{ job.status }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow,job,took
+          custom_payload: |
+            {
+              "attachments": [{
+                "color": "${{ job.status == 'success' && 'good' || 'danger' }}",
+                "blocks": [
+                  {
+                    "type": "header",
+                    "text": {
+                      "type": "plain_text",
+                      "text": "Test Deployment"
+                    }
+                  },
+                  {
+                    "type": "section",
+                    "fields": [
+                      {
+                        "type": "mrkdwn",
+                        "text": "*Status:*\n${{ job.status }}"
+                      },
+                      {
+                        "type": "mrkdwn",
+                        "text": "*Environment:*\nTest"
+                      }
+                    ]
+                  }
+                ]
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_CHANNEL: ${{ env.SLACK_CHANNEL }}
+
+  deploy-staging:
+    needs: [build-and-push, deploy-test]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    environment: staging
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+
+      - name: Deploy to Staging
+        run: |
+          # Deploy using Helm
+          helm upgrade --install unified-app ./gitops/charts/unified-app \
+            --namespace staging \
+            -f values/staging.yaml \
+            --set global.environment=staging \
+            --wait \
+            --timeout 5m
+
+      - name: Notify Slack
+        uses: 8398a7/action-slack@v3
+        if: always()
+        with:
+          status: ${{ job.status }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow,job,took
+          custom_payload: |
+            {
+              "attachments": [{
+                "color": "${{ job.status == 'success' && 'good' || 'danger' }}",
+                "blocks": [
+                  {
+                    "type": "header",
+                    "text": {
+                      "type": "plain_text",
+                      "text": "Staging Deployment"
+                    }
+                  },
+                  {
+                    "type": "section",
+                    "fields": [
+                      {
+                        "type": "mrkdwn",
+                        "text": "*Status:*\n${{ job.status }}"
+                      },
+                      {
+                        "type": "mrkdwn",
+                        "text": "*Environment:*\nStaging"
+                      }
+                    ]
+                  }
+                ]
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_CHANNEL: ${{ env.SLACK_CHANNEL }}
+
+  deploy-production:
+    needs: [build-and-push, deploy-staging]
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    environment: production
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+
+      - name: Deploy to Production
+        run: |
+          # Deploy using Helm
+          helm upgrade --install unified-app ./gitops/charts/unified-app \
+            --namespace production \
+            -f values/production.yaml \
+            --set global.environment=production \
+            --wait \
+            --timeout 5m
+
+      - name: Notify Slack
+        uses: 8398a7/action-slack@v3
+        if: always()
+        with:
+          status: ${{ job.status }}
+          fields: repo,message,commit,author,action,eventName,ref,workflow,job,took
+          custom_payload: |
+            {
+              "attachments": [{
+                "color": "${{ job.status == 'success' && 'good' || 'danger' }}",
+                "blocks": [
+                  {
+                    "type": "header",
+                    "text": {
+                      "type": "plain_text",
+                      "text": "Production Deployment"
+                    }
+                  },
+                  {
+                    "type": "section",
+                    "fields": [
+                      {
+                        "type": "mrkdwn",
+                        "text": "*Status:*\n${{ job.status }}"
+                      },
+                      {
+                        "type": "mrkdwn",
+                        "text": "*Environment:*\nProduction"
+                      }
+                    ]
+                  }
+                ]
+              }]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          SLACK_CHANNEL: ${{ env.SLACK_CHANNEL }}

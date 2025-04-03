@@ -1,0 +1,36 @@
+{{ range $key, $app := .Values }}
+{{ if and (ne $key "global") (ne $key "monitoring") (ne $key "backup") (ne $key "notifications") }}
+{{ if $app.enabled }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $.Release.Name }}-{{ $key }}
+  labels:
+    app: {{ $.Release.Name }}-{{ $key }}
+    {{ include "unified-app.labels" $ | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    {{ if eq $key "mysql" }}
+    - port: 3306
+      targetPort: 3306
+      protocol: TCP
+      name: mysql
+    {{ else if eq $key "redis" }}
+    - port: 6379
+      targetPort: 6379
+      protocol: TCP
+      name: redis
+    {{ else }}
+    - port: 80
+      targetPort: http
+      protocol: TCP
+      name: http
+    {{ end }}
+  selector:
+    app: {{ $.Release.Name }}-{{ $key }}
+    {{ include "unified-app.selectorLabels" $ | nindent 4 }}
+{{ end }}
+{{ end }}
+{{ end }} 

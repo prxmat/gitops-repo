@@ -1,0 +1,167 @@
+global:
+  environment: development
+  ttl:
+    enabled: true
+    duration: "24h"
+  notifications:
+    enabled: true
+    slack:
+      webhook: ""
+      channel: "#deployments"
+
+environments:
+  integration:
+    enabled: true
+    namespace: integration
+    ingress:
+      enabled: true
+      host: "integration.example.com"
+    resources:
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+
+  test:
+    enabled: true
+    namespace: test
+    ingress:
+      enabled: true
+      host: "test.example.com"
+    resources:
+      limits:
+        cpu: "500m"
+        memory: "512Mi"
+      requests:
+        cpu: "100m"
+        memory: "128Mi"
+
+  staging:
+    enabled: true
+    namespace: staging
+    ingress:
+      enabled: true
+      host: "staging.example.com"
+    resources:
+      limits:
+        cpu: "1"
+        memory: "1Gi"
+      requests:
+        cpu: "200m"
+        memory: "256Mi"
+
+  production:
+    enabled: true
+    namespace: production
+    ingress:
+      enabled: true
+      host: "example.com"
+    resources:
+      limits:
+        cpu: "2"
+        memory: "2Gi"
+      requests:
+        cpu: "500m"
+        memory: "512Mi"
+
+# Application specific configurations
+nestjs-api:
+  enabled: true
+  replicas: 1
+  image:
+    repository: "node"
+    tag: "18"
+  port: 3000
+  env:
+    - name: NODE_ENV
+      value: "development"
+    - name: PORT
+      value: "3000"
+
+vue-frontend:
+  enabled: true
+  replicas: 1
+  image:
+    repository: "node"
+    tag: "18"
+  port: 80
+  env:
+    - name: NODE_ENV
+      value: "development"
+    - name: API_URL
+      value: "http://nestjs-api:3000"
+
+prestashop:
+  enabled: true
+  replicas: 1
+  image:
+    repository: "prestashop/prestashop"
+    tag: "8"
+  port: 80
+  env:
+    - name: DB_SERVER
+      value: "mysql"
+    - name: DB_NAME
+      value: "prestashop"
+    - name: DB_USER
+      value: "prestashop"
+    - name: DB_PASSWD
+      value: "prestashop"
+    - name: PS_INSTALL_AUTO
+      value: "1"
+    - name: PS_DOMAIN
+      value: "localhost"
+    - name: PS_FOLDER_ADMIN
+      value: "admin1234"
+    - name: PS_FOLDER_INSTALL
+      value: "install1234"
+    - name: PS_COUNTRY
+      value: "fr"
+    - name: PS_DEV_MODE
+      value: "1"
+    - name: PS_SSL_ENABLED
+      value: "0"
+    - name: PS_HANDLE_DYNAMIC_DOMAIN
+      value: "1"
+
+# Common services
+mysql:
+  enabled: true
+  image:
+    repository: "mysql"
+    tag: "8.0"
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "1Gi"
+    requests:
+      cpu: "100m"
+      memory: "256Mi"
+  persistence:
+    size: "10Gi"
+  env:
+    - name: MYSQL_ROOT_PASSWORD
+      value: "root"
+    - name: MYSQL_DATABASE
+      value: "app"
+    - name: MYSQL_USER
+      value: "app"
+    - name: MYSQL_PASSWORD
+      value: "app"
+
+redis:
+  enabled: true
+  image:
+    repository: "redis"
+    tag: "6.2"
+  resources:
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+  persistence:
+    size: "5Gi"

@@ -1,0 +1,72 @@
+apiVersion: scaffolder.backstage.io/v1beta3
+kind: Template
+metadata:
+  name: create-test-environment
+  title: Create Test Environment
+  description: Create a new test environment for a project
+spec:
+  owner: platform-team
+  type: service
+  parameters:
+    - title: Environment Details
+      required:
+        - project
+        - user
+        - imageTag
+        - appType
+      properties:
+        project:
+          title: Project Name
+          type: string
+          description: The name of the project to create an environment for
+        user:
+          title: User Name
+          type: string
+          description: The name of the user requesting the environment
+        ttlHours:
+          title: Time to Live (hours)
+          type: number
+          description: How long should this environment live (in hours)?
+          default: 24
+          minimum: 1
+          maximum: 72
+        imageTag:
+          title: Image Tag
+          type: string
+          description: The Docker image tag to deploy (format: vMAJOR.MINOR.PATCH)
+          pattern: '^v[0-9]+\.[0-9]+\.[0-9]+$'
+        appType:
+          title: Application Type
+          type: string
+          description: Select the type of application to deploy
+          enum:
+            - prestashop
+            - wordpress
+            - drupal
+            - custom-service
+          enumNames:
+            - PrestaShop (E-commerce)
+            - WordPress (CMS)
+            - Drupal (CMS)
+            - Custom Service
+  steps:
+    - id: create-test-env
+      name: Create Test Environment
+      action: github:actions:dispatch
+      input:
+        workflowId: create-test-env.yml
+        repoUrl: https://github.com/your-org/gitops-repo
+        inputs:
+          project: ${{ parameters.project }}
+          user: ${{ parameters.user }}
+          ttl_hours: ${{ parameters.ttlHours }}
+          image_tag: ${{ parameters.imageTag }}
+          app_type: ${{ parameters.appType }}
+  output:
+    links:
+      - title: View in ArgoCD
+        url: https://argocd.your-domain.com/applications/test-${{ parameters.project }}-${{ parameters.user }}
+      - title: View in GitHub
+        url: https://github.com/your-org/gitops-repo/actions
+      - title: View Application
+        url: https://test-${{ parameters.project }}-${{ parameters.user }}.your-domain.com 
