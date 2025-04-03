@@ -4,6 +4,12 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
 
+# Ajout des permissions nécessaires
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+
 jobs:
   create-environment:
     runs-on: ubuntu-latest
@@ -19,6 +25,7 @@ jobs:
       - name: Setup Environment Bot
         uses: actions/github-script@v6
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             // Create initial comment with questions
             const services = [
@@ -69,6 +76,7 @@ jobs:
       - name: Monitor Responses
         uses: actions/github-script@v6
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             // Function to check if all questions are answered
             const checkAnswers = async () => {
@@ -98,13 +106,6 @@ jobs:
               
               // Create environment
               const envName = `env-${context.actor}-${context.issue.number}`;
-              
-              // Create namespace
-              await exec.exec('kubectl', [
-                'create', 'namespace', envName,
-                '--dry-run=client',
-                '-o', 'yaml'
-              ]);
               
               // Create ArgoCD application
               const application = {
