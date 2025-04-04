@@ -1,24 +1,24 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: unified-app
+  name: unified-app-prs
   namespace: argocd
 spec:
   project: default
   source:
     repoURL: https://github.com/prxmat/gitops-repo.git
-    targetRevision: HEAD
+    targetRevision: main
     path: gitops/charts/unified-app
     helm:
-      values: |
-        global:
-          environment: development
+      valueFiles:
+        - values.yaml
+        - pr-environments/pr-{{ .Values.prNumber }}-values.yaml
   destination:
     server: https://kubernetes.default.svc
-    namespace: development
+    namespace: unified-app-pr-{{ .Values.prNumber }}
   syncPolicy:
     automated:
       prune: true
       selfHeal: true
     syncOptions:
-      - CreateNamespace=true 
+      - CreateNamespace=true

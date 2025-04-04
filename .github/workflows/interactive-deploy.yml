@@ -1,0 +1,74 @@
+name: Interactive Deploy with Choices
+
+on:
+  issue_comment:
+    types: [created]
+
+jobs:
+  deploy:
+    if: startsWith(github.event.comment.body, '/deploy')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Parse deployment choices
+        id: choices
+        run: |
+          COMMENT="${{ github.event.comment.body }}"
+          echo "backend=$(echo "$COMMENT" | grep -oP 'backend=\K\S+')" >> $GITHUB_OUTPUT
+          echo "frontend=$(echo "$COMMENT" | grep -oP 'frontend=\K\S+')" >> $GITHUB_OUTPUT
+          echo "db=$(echo "$COMMENT" | grep -oP 'db=\K\S+')" >> $GITHUB_OUTPUT
+
+      - name: Generate custom Helm values
+        run: |
+          PR_NUMBER=${{ github.event.issue.number }}
+          cat <<EOF > values-pr-${PR_NUMBER}.yaml
+backend:
+  type: "${{ steps.choices.outputs.backend }}"
+  enabled: ${{ steps.choices.outputs.backend != '' }}
+
+frontend:
+  type: "${{ steps.choices.outputs.frontend }}"
+  enabled: ${{ steps.choices.outputs.frontend != '' }}
+
+database:
+  type: "${{ steps.choices.outputs.db }}"
+  enabled: ${{ steps.choices.outputs.db != '' }}
+
+global:
+  environment: "pr-${PR_NUMBER}"
+EOF
+
+      - name: Push custom Helm values
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git checkout -b pr/${{ github.event.issue.number }}-interactive
+          git add values-pr-${{ github.event.issue.number }}.yaml
+          git commit -m "chore: values for PR #${{ github.event.issue.number }}"
+          git push origin pr/${{ github.event.issue.number }}-interactive --force
+
+      - name: Comment PR with confirmation
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          script: |
+            await github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `
+✅ Environnement personnalisé créé avec succès !
+
+| Composant | Sélectionné |
+|-----------|-------------|
+| Backend   | **${{ steps.choices.outputs.backend || 'aucun' }}** |
+| Frontend  | **${{ steps.choices.outputs.frontend || 'aucun' }}** |
+| Base de données | **${{ steps.choices.outputs.db || 'aucune' }}** |
+
+ArgoCD va automatiquement prendre en compte ces choix. 🚀
+`
+            });
