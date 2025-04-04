@@ -7,16 +7,22 @@ on:
 jobs:
   post-comment:
     runs-on: ubuntu-latest
+    permissions:
+      pull-requests: write
     steps:
       - name: Post interactive comment
         uses: actions/github-script@v6
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
+            const prNumber = context.payload.pull_request.number;
+            const repoOwner = context.repo.owner;
+            const repoName = context.repo.repo;
+
+            await github.rest.issues.createComment({
+              issue_number: prNumber,
+              owner: repoOwner,
+              repo: repoName,
               body: `
 ## 🚀 Déploiement interactif
 
@@ -24,8 +30,8 @@ Clique sur les liens ci-dessous pour choisir ton environnement :
 
 | Backend | Frontend | Base de données |
 |---------|----------|-----------------|
-| [Nest.js](https://github.com/${context.repo.owner}/${context.repo.repo}/issues/${context.issue.number}#issuecomment-new?body=/deploy+backend=nest) | [Vue.js](https://github.com/${context.repo.owner}/${context.repo.repo}/issues/${context.issue.number}#issuecomment-new?body=/deploy+frontend=vue) | [MySQL](https://github.com/${context.repo.owner}/${context.repo.repo}/issues/${context.issue.number}#issuecomment-new?body=/deploy+db=mysql) |
-| [Express](https://github.com/${context.repo.owner}/${context.repo.repo}/issues/${context.issue.number}#issuecomment-new?body=/deploy+backend=express) | [React](https://github.com/${context.repo.owner}/${context.repo.repo}/issues/${context.issue.number}#issuecomment-new?body=/deploy+frontend=react) | [Postgres](https://github.com/${context.repo.owner}/${context.repo.repo}/issues/${context.issue.number}#issuecomment-new?body=/deploy+db=postgres) |
+| [Nest.js](https://github.com/${repoOwner}/${repoName}/pull/${prNumber}#issuecomment-new?body=/deploy+backend=nest) | [Vue.js](https://github.com/${repoOwner}/${repoName}/pull/${prNumber}#issuecomment-new?body=/deploy+frontend=vue) | [MySQL](https://github.com/${repoOwner}/${repoName}/pull/${prNumber}#issuecomment-new?body=/deploy+db=mysql) |
+| [Express](https://github.com/${repoOwner}/${repoName}/pull/${prNumber}#issuecomment-new?body=/deploy+backend=express) | [React](https://github.com/${repoOwner}/${repoName}/pull/${prNumber}#issuecomment-new?body=/deploy+frontend=react) | [Postgres](https://github.com/${repoOwner}/${repoName}/pull/${prNumber}#issuecomment-new?body=/deploy+db=postgres) |
 
 Clique simplement sur les choix que tu veux pour créer ton environnement personnalisé ✨
 `
